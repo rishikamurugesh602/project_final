@@ -3,7 +3,7 @@ Application configuration management.
 Loads settings from environment variables and .env file.
 """
 import os
-from typing import Optional
+from typing import List, Optional
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -42,19 +42,32 @@ class Config:
     # Model Paths
     DEEPFAKE_MODEL_PATH: str = os.getenv("DEEPFAKE_MODEL_PATH", "models/checkpoints/deepfake_detector_best.pt")
     SCAM_MODEL_PATH: str = os.getenv("SCAM_MODEL_PATH", "models/checkpoints/scam_detector.pt")
+    SCAM_LOCAL_ONLY: bool = os.getenv("SCAM_LOCAL_ONLY", "true").lower() == "true"
     
-    # Database
+    # Database & Privacy
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./data/app.db")
     ENABLE_AUDIO_STORAGE: bool = os.getenv("ENABLE_AUDIO_STORAGE", "false").lower() == "true"
     
     # API
     API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
     API_PORT: int = int(os.getenv("API_PORT", "8000"))
+    ALLOWED_ORIGINS: str = os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:8000,http://127.0.0.1:8000,http://localhost:8501,http://127.0.0.1:8501"
+    )
     
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     LOG_DIR: str = os.getenv("LOG_DIR", "logs")
     
+    @classmethod
+    def get_allowed_origins(cls) -> List[str]:
+        """Return list of allowed CORS origins."""
+        raw = cls.ALLOWED_ORIGINS.strip()
+        if not raw:
+            return ["http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:8501", "http://127.0.0.1:8501"]
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
     @classmethod
     def validate(cls) -> None:
         """Validate critical configuration settings."""

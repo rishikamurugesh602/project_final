@@ -57,11 +57,6 @@ class DeepfakeDetectorModel(nn.Module):
         self.bn3 = nn.BatchNorm2d(128)
         self.pool3 = nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2))
         
-        # Calculate CNN output size
-        # Input: (batch, 1, n_mels, time_steps)
-        # After conv1 + pool1: (batch, 32, n_mels/2, time_steps/2)
-        # After conv2 + pool2: (batch, 64, n_mels/4, time_steps/4)
-        # After conv3 + pool3: (batch, 128, n_mels/8, time_steps/4)
         self.cnn_out_mels = n_mels // 8
         self.cnn_out_channels = 128
         
@@ -150,19 +145,21 @@ class DeepfakeDetector:
         self.model_path = model_path
         self.model = None
         self.is_loaded = False
+        self.status_message = "Untrained / Random Weights"
         
-        # Create model
+        # Create model architecture
         self.model = DeepfakeDetectorModel().to(device)
         
         # Try to load pretrained weights if provided
         if model_path and self._check_model_exists(model_path):
             self.load_model(model_path)
         else:
-            logger.warning(
-                f"Model path not found or not provided: {model_path}. "
-                "Using randomly initialized model."
-            )
             self.is_loaded = False
+            self.status_message = "Untrained / Random Weights (Demo Only - No Verified Checkpoint)"
+            logger.warning(
+                f"Model checkpoint not found or not provided at: {model_path}. "
+                "Operating with untrained random weights (demo only)."
+            )
     
     def _check_model_exists(self, path: str) -> bool:
         """Check if model file exists."""
@@ -183,10 +180,12 @@ class DeepfakeDetector:
             else:
                 self.model.load_state_dict(checkpoint)
             self.is_loaded = True
+            self.status_message = f"Checkpoint loaded: {model_path}"
             logger.info(f"Loaded deepfake detector from {model_path}")
         except Exception as e:
             logger.error(f"Error loading model from {model_path}: {str(e)}")
             self.is_loaded = False
+            self.status_message = f"Failed to load checkpoint ({str(e)})"
     
     def predict(
         self,
@@ -215,9 +214,7 @@ class DeepfakeDetector:
                 logits = self.model(x)
                 probabilities = F.softmax(logits, dim=1)
                 
-                # Extract predictions
-                pred_class = torch.argmax(probabilities, dim=1).item()
-                confidence = probabilities[0, 1].item()  # Probability of being fake
+                confidence = float(probabilities[0, 1].item())  # Probability of being fake
                 
                 return {
                     "deepfake_probability": float(confidence),
@@ -227,7 +224,8 @@ class DeepfakeDetector:
                         "genuine": float(probabilities[0, 0].item()),
                         "ai_generated": float(probabilities[0, 1].item())
                     },
-                    "model_loaded": self.is_loaded
+                    "model_loaded": self.is_loaded,
+                    "model_status": self.status_message
                 }
         except Exception as e:
             logger.error(f"Error in deepfake prediction: {str(e)}")
@@ -236,7 +234,8 @@ class DeepfakeDetector:
                 "is_deepfake": False,
                 "prediction_class": "Unknown (Error)",
                 "error": str(e),
-                "model_loaded": self.is_loaded
+                "model_loaded": self.is_loaded,
+                "model_status": f"Inference error: {str(e)}"
             }
     
     def save_model(self, output_path: str, metadata: dict = None) -> None:

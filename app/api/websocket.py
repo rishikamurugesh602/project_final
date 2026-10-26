@@ -1,13 +1,16 @@
 """
 WebSocket endpoint for real-time audio streaming and analysis.
+Employs bounded sliding audio windows, bounded queues, and offloaded model inference.
 """
 import json
+import time
 import asyncio
 import base64
 import numpy as np
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.services.deepfake_service import AnalysisOrchestrator
 from app.services.audio_processor import AudioProcessor
+from app.services.streaming_processor import StreamingAnalysisSession
 from app.utils.config import config
 from app.utils.logging import logger
 
@@ -47,14 +50,15 @@ def decode_audio_payload(payload):
 @router.websocket("/ws/analyze")
 async def websocket_analyze(websocket: WebSocket):
     """
-    WebSocket endpoint for streaming audio analysis.
+    WebSocket endpoint for streaming audio analysis with bounded buffers and queueing.
     
     Client sends:
     {
         "type": "audio_chunk",
         "data": <base64_encoded_audio>,
         "sample_rate": 16000,
-        "is_final": false
+        "is_final": false,
+        "timestamp": 123456789.0
     }
     
     Server responds with:
@@ -64,14 +68,17 @@ async def websocket_analyze(websocket: WebSocket):
     }
     """
     await websocket.accept()
-    logger.info("WebSocket connection established")
+    logger.info("WebSocket analysis connection established")
     
-    audio_chunks = []
-    sample_rate = None
-    session_data = {
-        "total_bytes": 0,
-        "chunks_received": 0
-    }
+    stream_session = StreamingAnalysisSession(
+        orchestrator=orchestrator,
+        sample_rate=config.SAMPLE_RATE,
+        max_queue_size=30,
+        asr_interval_sec=5.0
+    )
+    
+    chunks_received = 0
+    total_bytes = 0
     
     try:
         while True:
@@ -86,40 +93,36 @@ async def websocket_analyze(websocket: WebSocket):
                     if audio_chunk.size == 0:
                         raise ValueError("Empty audio chunk received")
 
-                    audio_chunks.append(audio_chunk)
+                    chunks_received += 1
+                    total_bytes += len(audio_payload) if isinstance(audio_payload, str) else audio_chunk.nbytes
+                    client_ts = message.get("timestamp", time.time())
 
-                    if sample_rate is None:
-                        sample_rate = message.get("sample_rate", config.SAMPLE_RATE)
+                    # Enqueue chunk in bounded queue with backpressure handling
+                    enqueued = stream_session.enqueue_chunk(audio_chunk, client_timestamp=client_ts)
 
-                    session_data["chunks_received"] += 1
-                    session_data["total_bytes"] += len(audio_payload) if isinstance(audio_payload, str) else audio_chunk.nbytes
-
+                    # Send immediate status acknowledgement
                     await websocket.send_json({
                         "type": "status",
                         "data": {
-                            "chunks_received": session_data["chunks_received"],
-                            "total_bytes": session_data["total_bytes"],
-                            "message": "Chunk received"
+                            "chunks_received": chunks_received,
+                            "total_bytes": total_bytes,
+                            "queue_depth": stream_session.queue.qsize(),
+                            "dropped_chunks": stream_session.dropped_chunks_count,
+                            "state": stream_session.processing_state,
+                            "message": "Chunk enqueued" if enqueued else "Backpressure active: chunk dropped"
                         }
                     })
 
                     is_final = bool(message.get("is_final", False))
-                    if is_final or session_data["chunks_received"] % 10 == 0:
-                        if audio_chunks:
-                            full_audio = np.concatenate(audio_chunks)
-                            await websocket.send_json({
-                                "type": "status",
-                                "data": {"message": "Processing audio..."}
-                            })
-
-                            result = orchestrator.analyze(full_audio, sample_rate)
+                    # Trigger analysis every 3 chunks (~0.75s at 4096 samples/chunk) or on final chunk
+                    if is_final or (chunks_received % 3 == 0):
+                        result = await stream_session.process_next(is_final=is_final)
+                        if result:
                             await websocket.send_json({
                                 "type": "result",
                                 "data": result
                             })
 
-                            if is_final:
-                                audio_chunks = []
                 except Exception as e:
                     logger.error(f"Error processing audio chunk: {str(e)}")
                     await websocket.send_json({
@@ -128,23 +131,35 @@ async def websocket_analyze(websocket: WebSocket):
                     })
             
             elif message_type == "process":
-                if audio_chunks:
-                    full_audio = np.concatenate(audio_chunks)
-                    result = orchestrator.analyze(full_audio, sample_rate)
-                    await websocket.send_json({
-                        "type": "result",
-                        "data": result
-                    })
-                else:
+                try:
+                    result = await stream_session.process_next(is_final=True)
+                    if result:
+                        await websocket.send_json({
+                            "type": "result",
+                            "data": result
+                        })
+                    else:
+                        await websocket.send_json({
+                            "type": "error",
+                            "data": {"error": "Insufficient audio data to process"}
+                        })
+                except Exception as e:
+                    logger.error(f"Error in process command: {str(e)}")
                     await websocket.send_json({
                         "type": "error",
-                        "data": {"error": "No audio data to process"}
+                        "data": {"error": str(e)}
                     })
             
             elif message_type == "reset":
-                audio_chunks = []
-                sample_rate = None
-                session_data = {"total_bytes": 0, "chunks_received": 0}
+                stream_session.close()
+                stream_session = StreamingAnalysisSession(
+                    orchestrator=orchestrator,
+                    sample_rate=config.SAMPLE_RATE,
+                    max_queue_size=30,
+                    asr_interval_sec=5.0
+                )
+                chunks_received = 0
+                total_bytes = 0
                 await websocket.send_json({
                     "type": "status",
                     "data": {"message": "Session reset"}
@@ -157,7 +172,7 @@ async def websocket_analyze(websocket: WebSocket):
                 })
     
     except WebSocketDisconnect:
-        logger.info("WebSocket connection closed")
+        logger.info("WebSocket analysis connection closed by client")
     except Exception as e:
         logger.error(f"WebSocket error: {str(e)}")
         try:
@@ -167,3 +182,5 @@ async def websocket_analyze(websocket: WebSocket):
             })
         except Exception:
             pass
+    finally:
+        stream_session.close()

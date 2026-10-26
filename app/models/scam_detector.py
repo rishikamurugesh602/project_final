@@ -2,10 +2,10 @@
 NLP-based scam/fraud intent detection.
 Uses transformer-based classification with fallback to rule-based detection.
 """
+import os
 import torch
 import numpy as np
 from typing import Optional, List, Dict
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from app.utils.config import config
 from app.utils.logging import logger
 
@@ -15,8 +15,8 @@ class ScamDetector:
     Scam detection using NLP.
     
     Combines:
-    1. Transformer-based zero-shot classification
-    2. Rule-based suspicious indicator detection
+    1. Transformer-based zero-shot classification (when available)
+    2. Rule-based suspicious indicator detection (fast, deterministic fallback)
     """
     
     # Suspicious keywords and patterns
@@ -43,24 +43,41 @@ class ScamDetector:
         self.tokenizer = None
         self.model = None
         self.model_loaded = False
+        self.status_message = "Rule-based only (transformer weights not provided)"
         
-        try:
-            # Try to load a lightweight transformer model
-            model_name = "facebook/bart-large-mnli"
-            logger.info(f"Loading transformer model: {model_name}")
-            
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
-            self.model.to(device)
-            self.model.eval()
-            self.model_loaded = True
-            logger.info("Transformer model loaded successfully")
-        except Exception as e:
-            logger.warning(
-                f"Could not load transformer model: {str(e)}. "
-                "Using rule-based detection only."
-            )
+        model_name = "facebook/bart-large-mnli"
+        local_path = config.SCAM_MODEL_PATH if os.path.exists(config.SCAM_MODEL_PATH) else None
+        
+        # Only attempt to import/load transformers if local weights exist or online download allowed
+        if local_path is not None:
+            try:
+                from transformers import AutoTokenizer, AutoModelForSequenceClassification
+                logger.info(f"Loading transformer model from local path: {local_path}")
+                self.tokenizer = AutoTokenizer.from_pretrained(local_path, local_files_only=True)
+                self.model = AutoModelForSequenceClassification.from_pretrained(local_path, local_files_only=True)
+                self.model.to(device)
+                self.model.eval()
+                self.model_loaded = True
+                self.status_message = f"Transformer model loaded from {local_path}"
+            except Exception as e:
+                logger.warning(f"Failed to load transformer from {local_path}: {e}")
+                self.model_loaded = False
+        elif not config.SCAM_LOCAL_ONLY:
+            try:
+                from transformers import AutoTokenizer, AutoModelForSequenceClassification
+                logger.info(f"Attempting download for: {model_name}")
+                self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+                self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
+                self.model.to(device)
+                self.model.eval()
+                self.model_loaded = True
+                self.status_message = "Transformer model downloaded and loaded"
+            except Exception as dl_err:
+                self.model_loaded = False
+                self.status_message = f"Transformer download unavailable ({dl_err}); rule-based active"
+        else:
             self.model_loaded = False
+            self.status_message = "Rule-based detection active (transformer offline / not cached)"
     
     def detect_suspicious_indicators(self, text: str) -> Dict[str, List[str]]:
         """
@@ -98,7 +115,6 @@ class ScamDetector:
         if not indicators:
             return 0.0
         
-        # Weight different categories
         category_weights = {
             "password": 0.25,
             "banking": 0.25,
@@ -116,7 +132,6 @@ class ScamDetector:
         
         for category, keywords in indicators.items():
             weight = category_weights.get(category, 0.1)
-            # Each keyword in a category increases the score
             category_score = min(len(keywords) * 0.1, 1.0)
             score += weight * category_score
             total_weight += weight
@@ -141,7 +156,6 @@ class ScamDetector:
         
         try:
             with torch.no_grad():
-                # Tokenize
                 inputs = self.tokenizer(
                     text,
                     return_tensors="pt",
@@ -151,13 +165,11 @@ class ScamDetector:
                 )
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
                 
-                # Predict
                 outputs = self.model(**inputs)
                 probabilities = torch.softmax(outputs.logits, dim=-1)
                 
                 # For BART-MNLI: logits are [contradiction, neutral, entailment]
-                # We map: high entailment confidence -> scam
-                scam_prob = probabilities[0, 2].item()  # Entailment
+                scam_prob = probabilities[0, 2].item()
                 confidence = torch.max(probabilities[0]).item()
                 
                 return {
@@ -183,31 +195,30 @@ class ScamDetector:
                 "scam_probability": 0.0,
                 "risk_category": "LOW",
                 "indicators": [],
-                "detection_method": "rule-based"
+                "detection_method": "rule-based",
+                "model_loaded": self.model_loaded,
+                "model_status": self.status_message
             }
         
-        # Detect indicators
         indicators = self.detect_suspicious_indicators(text)
         indicator_list = []
         for category, keywords in indicators.items():
             indicator_list.append(f"{category}: {', '.join(keywords)}")
         
-        # Calculate rule-based score
         rule_score = self.calculate_risk_score_from_indicators(indicators)
         
-        # Get transformer score if available
-        transformer_result = self.predict_transformer(text)
-        transformer_score = transformer_result.get("scam_probability", 0.5)
-        
-        # Combine scores (weighted average)
         if self.model_loaded:
+            transformer_result = self.predict_transformer(text)
+            transformer_score = transformer_result.get("scam_probability", 0.5)
             combined_score = 0.6 * transformer_score + 0.4 * rule_score
             detection_method = "transformer + rules"
+            confidence = transformer_result.get("confidence", 0.0)
         else:
+            transformer_score = None
             combined_score = rule_score
-            detection_method = "rule-based"
+            detection_method = "rule-based (transformer weights not loaded)"
+            confidence = min(rule_score * 1.2, 1.0)
         
-        # Determine risk category
         if combined_score < config.SCAM_THRESHOLD:
             risk_category = "LOW"
         elif combined_score < (config.SCAM_THRESHOLD + 0.3):
@@ -216,11 +227,13 @@ class ScamDetector:
             risk_category = "HIGH"
         
         return {
-            "scam_probability": min(max(combined_score, 0.0), 1.0),
+            "scam_probability": float(min(max(combined_score, 0.0), 1.0)),
             "risk_category": risk_category,
             "indicators": indicator_list,
             "detection_method": detection_method,
-            "rule_score": rule_score,
-            "transformer_score": transformer_score if self.model_loaded else None,
-            "confidence": transformer_result.get("confidence", 0.0) if self.model_loaded else 0.0
+            "rule_score": float(rule_score),
+            "transformer_score": float(transformer_score) if transformer_score is not None else None,
+            "confidence": float(confidence),
+            "model_loaded": self.model_loaded,
+            "model_status": self.status_message
         }

@@ -41,7 +41,9 @@ class AnalysisOrchestrator:
         self,
         audio: np.ndarray,
         sr: int,
-        audio_filename: Optional[str] = None
+        audio_filename: Optional[str] = None,
+        run_asr: bool = True,
+        existing_transcript: str = ""
     ) -> Dict:
         """
         Complete audio analysis pipeline.
@@ -50,6 +52,8 @@ class AnalysisOrchestrator:
             audio: Audio array
             sr: Sample rate
             audio_filename: Optional filename for logging
+            run_asr: Whether to execute Whisper ASR
+            existing_transcript: Transcript to reuse if run_asr is False
         
         Returns:
             Dictionary with complete analysis results
@@ -60,40 +64,48 @@ class AnalysisOrchestrator:
         timing = {}
         
         try:
-            # Audio preprocessing
+            # 1. Audio preprocessing
             t0 = time.time()
             audio_preprocessed = self.audio_processor.preprocess(audio, sr)
             timing['preprocessing'] = time.time() - t0
-            logger.info(f"Audio preprocessing completed in {timing['preprocessing']:.2f}s")
             
-            # Extract features for deepfake detection
+            # 2. Extract features for deepfake detection
             mel_spec = self.audio_processor.extract_mel_spectrogram(audio_preprocessed)
             
-            # Deepfake detection
+            # 3. Deepfake detection
             t0 = time.time()
             deepfake_detector = self.model_manager.get_deepfake_detector()
             deepfake_result = deepfake_detector.predict(mel_spec)
             deepfake_probability = deepfake_result.get("deepfake_probability", 0.5)
             timing['deepfake'] = time.time() - t0
-            logger.info(f"Deepfake detection completed in {timing['deepfake']:.2f}s")
             
-            # ASR (Speech Recognition)
+            # 4. ASR (Speech Recognition)
             t0 = time.time()
-            asr_service = self.model_manager.get_asr_service()
-            asr_result = asr_service.transcribe(audio_preprocessed, sr=config.SAMPLE_RATE)
-            transcript = asr_result.get("text", "")
+            if run_asr:
+                try:
+                    asr_service = self.model_manager.get_asr_service()
+                    asr_result = asr_service.transcribe(audio_preprocessed, sr=config.SAMPLE_RATE)
+                    transcript = asr_result.get("text", "")
+                    asr_success = asr_result.get("success", False)
+                except Exception as asr_err:
+                    logger.warning(f"ASR transcription failed: {asr_err}")
+                    asr_result = {"text": existing_transcript, "success": False, "error": str(asr_err)}
+                    transcript = existing_transcript
+                    asr_success = False
+            else:
+                transcript = existing_transcript
+                asr_result = {"text": existing_transcript, "success": bool(existing_transcript)}
+                asr_success = bool(existing_transcript)
             timing['asr'] = time.time() - t0
-            logger.info(f"ASR completed in {timing['asr']:.2f}s")
             
-            # Scam Intent Analysis
+            # 5. Scam Intent Analysis
             t0 = time.time()
             scam_detector = self.model_manager.get_scam_detector()
             scam_result = scam_detector.predict(transcript)
             scam_probability = scam_result.get("scam_probability", 0.0)
             timing['scam'] = time.time() - t0
-            logger.info(f"Scam analysis completed in {timing['scam']:.2f}s")
             
-            # Risk Assessment
+            # 6. Risk Assessment
             risk_result = self.risk_engine.calculate_risk(
                 deepfake_probability,
                 scam_probability
@@ -101,10 +113,9 @@ class AnalysisOrchestrator:
             overall_risk_score = risk_result.get("overall_risk_score", 0.0)
             risk_category = risk_result.get("risk_category", "UNKNOWN")
             
-            # Calculate total time
             total_time = sum(timing.values())
             
-            # Build complete response
+            # Build unified canonical response structure
             analysis_response = {
                 "session_id": session_id,
                 "timestamp": datetime.utcnow().isoformat(),
@@ -113,15 +124,18 @@ class AnalysisOrchestrator:
                 "deepfake_probability": deepfake_probability,
                 "deepfake_prediction": deepfake_result.get("prediction_class", "Unknown"),
                 "deepfake_model_loaded": deepfake_result.get("model_loaded", False),
+                "deepfake_model_status": deepfake_result.get("model_status", "Untrained / Random Weights"),
                 
                 # ASR results
                 "transcript": transcript,
-                "asr_success": asr_result.get("success", False),
+                "asr_success": asr_success,
                 
                 # Scam results
                 "scam_probability": scam_probability,
                 "scam_indicators": scam_result.get("indicators", []),
                 "scam_detection_method": scam_result.get("detection_method", "unknown"),
+                "scam_model_loaded": scam_result.get("model_loaded", False),
+                "scam_model_status": scam_result.get("model_status", "unknown"),
                 
                 # Risk results
                 "overall_risk_score": overall_risk_score,
@@ -129,6 +143,22 @@ class AnalysisOrchestrator:
                 "risk_reasons": risk_result.get("reasons", []),
                 "recommendation": self.risk_engine.get_recommendation(risk_category),
                 "should_alert": self.risk_engine.should_alert(risk_category),
+                
+                # Model status summary (transparent reporting)
+                "model_status": {
+                    "deepfake": {
+                        "loaded": deepfake_result.get("model_loaded", False),
+                        "status": deepfake_result.get("model_status", "Untrained / Random Weights (Demo Only)")
+                    },
+                    "scam": {
+                        "loaded": scam_result.get("model_loaded", False),
+                        "status": scam_result.get("model_status", "Rule-based fallback")
+                    },
+                    "asr": {
+                        "loaded": asr_success,
+                        "status": "Whisper ASR" if asr_success else "Not executed or bypassed"
+                    }
+                },
                 
                 # Metadata
                 "audio_filename": audio_filename,
@@ -140,7 +170,14 @@ class AnalysisOrchestrator:
                 "deepfake_time": timing['deepfake'],
                 "asr_time": timing['asr'],
                 "scam_time": timing['scam'],
-                "total_processing_time": total_time
+                "total_processing_time": total_time,
+                "timing_metrics": {
+                    "preprocessing_time": timing['preprocessing'],
+                    "deepfake_time": timing['deepfake'],
+                    "asr_time": timing['asr'],
+                    "scam_time": timing['scam'],
+                    "total_processing_time": total_time
+                }
             }
             
             logger.info(

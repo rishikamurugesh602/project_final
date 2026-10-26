@@ -111,6 +111,19 @@ class AnalysisResultCRUD:
         ).order_by(AnalysisResult.timestamp.desc()).limit(limit).all()
     
     @staticmethod
+    def clear_all(db: Session) -> int:
+        """Delete all analysis history records from the database."""
+        try:
+            count = db.query(AnalysisResult).delete()
+            db.commit()
+            logger.info(f"Cleared {count} analysis history records")
+            return count
+        except Exception as e:
+            logger.error(f"Error clearing analysis history: {str(e)}")
+            db.rollback()
+            raise
+
+    @staticmethod
     def get_statistics(db: Session, hours: int = 24) -> dict:
         """
         Get statistics for the last N hours.

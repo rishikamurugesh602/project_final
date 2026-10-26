@@ -1,6 +1,6 @@
 """
 Enhanced Streamlit dashboard for real-time deepfake voice detection.
-Modern UI with improved visualizations, better UX, and comprehensive features.
+Modern UI with improved visualizations, honest model reporting, and WebRTC integration.
 """
 import streamlit as st
 import numpy as np
@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import requests
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 import librosa
 import soundfile as sf
 from io import BytesIO
@@ -35,7 +35,6 @@ st.set_page_config(
 # ============================================================================
 st.markdown("""
     <style>
-    /* Global dark theme */
     .stApp {
         background: linear-gradient(180deg, #07111f 0%, #0d1b2a 100%);
         color: #edf4ff;
@@ -66,24 +65,23 @@ st.markdown("""
     .header-main {
         background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%);
         color: white;
-        padding: 40px;
+        padding: 35px;
         border-radius: 15px;
-        margin-bottom: 30px;
+        margin-bottom: 25px;
         box-shadow: 0 8px 32px rgba(37, 99, 235, 0.25);
         text-align: center;
     }
     .header-main h1 {
         margin: 0;
-        font-size: 3em;
+        font-size: 2.8em;
         font-weight: 800;
-        letter-spacing: -1px;
         color: white;
     }
     .header-main p {
-        margin: 15px 0 0 0;
-        font-size: 1.2em;
+        margin: 12px 0 0 0;
+        font-size: 1.15em;
         opacity: 0.95;
-        color: white;
+        color: #bfdbfe;
     }
     .status-online {
         display: inline-block;
@@ -93,7 +91,6 @@ st.markdown("""
         border: 1px solid rgba(34, 197, 94, 0.4);
         border-radius: 20px;
         font-weight: 600;
-        margin: 10px 5px 0 0;
     }
     .status-offline {
         display: inline-block;
@@ -103,102 +100,56 @@ st.markdown("""
         border: 1px solid rgba(239, 68, 68, 0.35);
         border-radius: 20px;
         font-weight: 600;
-        margin: 10px 5px 0 0;
     }
-    /* Metric cards */
     .metric-container {
         background: rgba(15, 23, 42, 0.92);
         color: #edf4ff;
-        padding: 25px;
+        padding: 22px;
         border-radius: 12px;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.18);
-        border: 1px solid rgba(148, 163, 184, 0.18);
-        margin: 10px 0;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        margin: 8px 0;
     }
-    
-    /* Risk level boxes */
     .risk-high {
         background: linear-gradient(135deg, #b91c1c 0%, #7f1d1d 100%);
         color: white;
-        padding: 30px;
+        padding: 24px;
         border-radius: 12px;
-        box-shadow: 0 8px 24px rgba(239, 68, 68, 0.25);
         border-left: 5px solid #fecaca;
+        margin: 14px 0;
     }
-    
     .risk-medium {
         background: linear-gradient(135deg, #d97706 0%, #92400e 100%);
         color: white;
-        padding: 30px;
+        padding: 24px;
         border-radius: 12px;
-        box-shadow: 0 8px 24px rgba(245, 158, 11, 0.25);
         border-left: 5px solid #fde68a;
+        margin: 14px 0;
     }
-    
     .risk-low {
         background: linear-gradient(135deg, #15803d 0%, #166534 100%);
         color: white;
-        padding: 30px;
+        padding: 24px;
         border-radius: 12px;
-        box-shadow: 0 8px 24px rgba(34, 197, 94, 0.22);
         border-left: 5px solid #bbf7d0;
+        margin: 14px 0;
     }
-    
-    /* Info boxes */
-    .info-box, .success-box, .warning-box {
+    .info-box {
         background: rgba(15, 23, 42, 0.9);
         color: #edf4ff;
         border: 1px solid rgba(148, 163, 184, 0.2);
         border-left: 4px solid #60a5fa;
-        padding: 20px;
+        padding: 16px;
         border-radius: 8px;
-        margin: 15px 0;
+        margin: 12px 0;
     }
-    
-    .success-box {
-        border-left-color: #34d399;
-    }
-    
-    .warning-box {
-        border-left-color: #f59e0b;
-    }
-
-    .call-card {
-        background: linear-gradient(135deg, #111827 0%, #16233b 100%);
-        border-radius: 16px;
-        padding: 28px;
-        color: white;
-        box-shadow: 0 12px 30px rgba(16, 24, 39, 0.35);
-        border: 1px solid rgba(255,255,255,0.08);
-    }
-
-    .call-alert {
-        background: linear-gradient(135deg, #ef4444 0%, #991b1b 100%);
-        color: white;
-        border-radius: 14px;
-        padding: 20px;
-        font-weight: 700;
-        box-shadow: 0 14px 30px rgba(180, 35, 24, 0.28);
-    }
-
-    /* Buttons */
-    .stButton > button {
-        background: linear-gradient(135deg, #2563eb 0%, #22c55e 100%);
-        color: white !important;
-        border: none;
-        padding: 10px 18px;
-        border-radius: 12px;
-        font-weight: 700;
-        box-shadow: 0 6px 18px rgba(37, 99, 235, 0.25);
-    }
-    
-    .stButton > button:hover {
-        filter: brightness(1.08);
-    }
-    
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+    .warning-card {
+        background: rgba(245, 158, 11, 0.12);
+        border: 1px solid rgba(245, 158, 11, 0.4);
+        border-radius: 10px;
+        padding: 14px 18px;
+        color: #fde68a;
+        margin: 12px 0;
+        font-size: 0.92rem;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -206,9 +157,8 @@ st.markdown("""
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
-API_URL = "http://127.0.0.1:8000/api/v1"  # Match the backend startup port
+API_URL = "http://127.0.0.1:8000/api/v1"
 
-# Session state initialization
 if 'analysis_result' not in st.session_state:
     st.session_state.analysis_result = None
 if 'uploaded_file' not in st.session_state:
@@ -227,37 +177,8 @@ def get_api_status():
         return False
 
 
-def upload_and_analyze(audio_file):
-    """Upload and analyze audio file via API."""
-    try:
-        files = {"file": audio_file}
-        with st.spinner("🔄 Analyzing audio... This may take 4-7 seconds..."):
-            response = requests.post(
-                f"{API_URL}/analyze/audio",
-                files=files,
-                timeout=120
-            )
-        
-        if response.status_code == 200:
-            payload = response.json()
-            return normalize_analysis_result(payload)
-        else:
-            st.error(f"❌ API Error: {response.json().get('detail', 'Unknown error')}")
-            return None
-    except requests.exceptions.Timeout:
-        st.error("❌ Request timeout. The analysis took too long.")
-        return None
-    except requests.exceptions.ConnectionError:
-        st.error(f"❌ Cannot connect to backend at {API_URL}")
-        st.info("💡 Make sure the backend is running: `python start_backend.py`")
-        return None
-    except Exception as e:
-        st.error(f"❌ Error: {str(e)}")
-        return None
-
-
 def normalize_analysis_result(result):
-    """Convert flat backend payloads into the nested structure expected by the dashboard UI."""
+    """Convert flat or nested backend payloads into the canonical structure expected by UI."""
     if not isinstance(result, dict):
         return result
 
@@ -265,14 +186,7 @@ def normalize_analysis_result(result):
 
     risk_category = result.get("risk_category", "UNKNOWN")
     risk_score = float(result.get("overall_risk_score", 0.0) or 0.0)
-    if risk_category == "LOW":
-        level = 1
-    elif risk_category == "MEDIUM":
-        level = 2
-    elif risk_category == "HIGH":
-        level = 3
-    else:
-        level = 1
+    level = 3 if risk_category == "HIGH" else (2 if risk_category == "MEDIUM" else 1)
 
     normalized["risk"] = {
         "risk_category": risk_category,
@@ -292,10 +206,9 @@ def normalize_analysis_result(result):
     scam_indicators = result.get("scam_indicators", [])
     if isinstance(scam_indicators, str):
         try:
-            import json
             scam_indicators = json.loads(scam_indicators)
         except Exception:
-            scam_indicators = []
+            scam_indicators = [scam_indicators]
 
     normalized["scam"] = {
         "scam_probability": float(result.get("scam_probability", 0.0) or 0.0),
@@ -315,66 +228,37 @@ def normalize_analysis_result(result):
     return normalized
 
 
-def load_demo_audio_files():
-    """Load available demo audio files."""
-    demo_dir = "demo_samples"
-    if os.path.exists(demo_dir):
-        files = [f for f in os.listdir(demo_dir) if f.endswith(('.wav', '.mp3', '.m4a', '.flac'))]
-        return sorted(files)
-    return []
-
-
-def create_risk_gauge(value, title="Risk Score"):
-    """Create a beautiful risk gauge chart."""
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number+delta",
-        value=value * 100,
-        title={"text": title},
-        delta={"reference": 50},
-        gauge={
-            "axis": {"range": [0, 100]},
-            "bar": {"color": "rgba(102, 126, 234, 0.8)"},
-            "steps": [
-                {"range": [0, 39], "color": "rgba(39, 174, 96, 0.2)"},
-                {"range": [39, 69], "color": "rgba(243, 156, 18, 0.2)"},
-                {"range": [69, 100], "color": "rgba(231, 76, 60, 0.2)"}
-            ],
-            "threshold": {
-                "line": {"color": "red", "width": 4},
-                "thickness": 0.75,
-                "value": 90
-            }
-        }
-    ))
-    fig.update_layout(
-        height=300,
-        font={"size": 14},
-        margin=dict(l=20, r=20, t=50, b=20)
-    )
-    return fig
-
-
-def get_risk_class(risk_category):
-    """Get CSS class for risk category."""
-    if risk_category == "HIGH":
-        return "risk-high"
-    elif risk_category == "MEDIUM":
-        return "risk-medium"
-    else:
-        return "risk-low"
+def upload_and_analyze(audio_file):
+    """Upload and analyze audio file via API."""
+    try:
+        files = {"file": audio_file}
+        with st.spinner("🔄 Analyzing audio..."):
+            response = requests.post(f"{API_URL}/analyze/audio", files=files, timeout=120)
+        
+        if response.status_code == 200:
+            return normalize_analysis_result(response.json())
+        else:
+            st.error(f"❌ API Error: {response.json().get('detail', 'Unknown error')}")
+            return None
+    except requests.exceptions.ConnectionError:
+        st.error(f"❌ Cannot connect to backend at {API_URL}. Ensure backend is running.")
+        return None
+    except Exception as e:
+        st.error(f"❌ Error: {str(e)}")
+        return None
 
 
 def stream_live_audio_to_backend(audio_file):
-    """Stream a file in chunks to the backend WebSocket to simulate a live phone call."""
+    """Stream audio chunks to the backend WebSocket to simulate live streaming."""
     try:
         file_bytes = audio_file.read() if hasattr(audio_file, 'read') else audio_file
         if not file_bytes:
-            st.error("Uploaded file is empty.")
+            st.error("Audio data is empty.")
             return None
 
         audio, sr = librosa.load(BytesIO(file_bytes), sr=16000, mono=True)
         if len(audio) == 0:
-            st.error("Could not read audio data from the uploaded file.")
+            st.error("Could not read audio data.")
             return None
 
         chunk_size = 16000
@@ -392,13 +276,22 @@ def stream_live_audio_to_backend(audio_file):
                         "type": "audio_chunk",
                         "data": base64.b64encode(np.asarray(chunk, dtype=np.float32).tobytes()).decode("utf-8"),
                         "sample_rate": sr,
-                        "is_final": i == total_chunks - 1
+                        "is_final": (i == total_chunks - 1),
+                        "timestamp": time.time()
                     }
                     await websocket.send(json.dumps(payload))
-                    responses.append(json.loads(await websocket.recv()))
+                    resp = json.loads(await websocket.recv())
+                    responses.append(resp)
+                    if resp.get("type") == "status":
+                        try:
+                            extra = await asyncio.wait_for(websocket.recv(), timeout=0.1)
+                            responses.append(json.loads(extra))
+                        except asyncio.TimeoutError:
+                            pass
 
                 await websocket.send(json.dumps({"type": "process"}))
-                responses.append(json.loads(await websocket.recv()))
+                resp = json.loads(await websocket.recv())
+                responses.append(resp)
 
         asyncio.run(send_stream())
 
@@ -420,43 +313,192 @@ def stream_live_audio_to_backend(audio_file):
         return {"error": str(e)}
 
 
-def get_demo_live_call_file():
-    """Return a demo file from demo_samples if available."""
-    demo_files = load_demo_audio_files()
-    if not demo_files:
-        return None
-    return os.path.join("demo_samples", demo_files[0])
+def load_demo_audio_files():
+    """Load available demo audio files."""
+    demo_dir = "demo_samples"
+    if os.path.exists(demo_dir):
+        files = [f for f in os.listdir(demo_dir) if f.endswith(('.wav', '.mp3', '.m4a', '.flac'))]
+        return sorted(files)
+    return []
+
+
+def create_risk_gauge(value, title="Risk Score"):
+    """Create risk gauge chart."""
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=value * 100,
+        title={"text": title},
+        gauge={
+            "axis": {"range": [0, 100]},
+            "bar": {"color": "#3b82f6"},
+            "steps": [
+                {"range": [0, 39], "color": "rgba(34, 197, 94, 0.25)"},
+                {"range": [39, 69], "color": "rgba(245, 158, 11, 0.25)"},
+                {"range": [69, 100], "color": "rgba(239, 68, 68, 0.25)"}
+            ]
+        }
+    ))
+    fig.update_layout(height=260, margin=dict(l=20, r=20, t=40, b=20), paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#edf4ff"))
+    return fig
+
+
+def get_risk_class(risk_category):
+    if risk_category == "HIGH":
+        return "risk-high"
+    elif risk_category == "MEDIUM":
+        return "risk-medium"
+    return "risk-low"
+
+
+def render_unified_analysis_result(result):
+    """Render canonical analysis results card used by upload and live call workflows."""
+    if not result:
+        return
+
+    risk_info = result.get("risk", {})
+    risk_category = risk_info.get("risk_category", "UNKNOWN")
+    risk_score = float(risk_info.get("overall_risk_score", 0.0) or 0.0)
+    deepfake_data = result.get("deepfake", {})
+    deepfake_prob = float(deepfake_data.get("deepfake_probability", 0.0) or 0.0)
+    scam_data = result.get("scam", {})
+    scam_prob = float(scam_data.get("scam_probability", 0.0) or 0.0)
+
+    # Model status transparency notice
+    df_loaded = deepfake_data.get("model_loaded", False)
+    df_status = str(result.get("deepfake_model_status", ""))
+    if not df_loaded or "untrained" in df_status.lower() or "random" in df_status.lower():
+        st.warning(
+            "⚠️ **Model Integrity Notice:** The deepfake acoustic detector is running with untrained / random weights "
+            "(demo mode). Scores are illustrative and cannot be used as evidence of real-world deepfake detection accuracy."
+        )
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown(
+            f"<div class='metric-container'><div style='font-size:12px;letter-spacing:1px;color:#93c5fd;text-transform:uppercase;'>Deepfake Risk</div><div style='font-size:2.2rem;font-weight:800;margin-top:8px;'>{deepfake_prob * 100:.1f}%</div><div style='font-size:11px;color:#94a3b8;'>{deepfake_data.get('prediction_class', 'Unknown')}</div></div>",
+            unsafe_allow_html=True
+        )
+    with c2:
+        st.markdown(
+            f"<div class='metric-container'><div style='font-size:12px;letter-spacing:1px;color:#93c5fd;text-transform:uppercase;'>Scam Intent</div><div style='font-size:2.2rem;font-weight:800;margin-top:8px;'>{scam_prob * 100:.1f}%</div><div style='font-size:11px;color:#94a3b8;'>{scam_data.get('detection_method', 'NLP')}</div></div>",
+            unsafe_allow_html=True
+        )
+    with c3:
+        st.markdown(
+            f"<div class='metric-container'><div style='font-size:12px;letter-spacing:1px;color:#93c5fd;text-transform:uppercase;'>Overall Risk</div><div style='font-size:2.2rem;font-weight:800;margin-top:8px;'>{risk_score * 100:.1f}%</div><div style='font-size:11px;color:#94a3b8;'>Category: {risk_category}</div></div>",
+            unsafe_allow_html=True
+        )
+
+    risk_class = get_risk_class(risk_category)
+    st.markdown(f"""
+        <div class="{risk_class}">
+            <h3 style="margin: 0;">Risk Level: {risk_category}</h3>
+            <h1 style="margin: 10px 0 0 0;">{risk_score * 100:.1f}%</h1>
+            <p style="margin: 10px 0 0 0; opacity: 0.9;">{risk_info.get('recommendation', 'No recommendation available')}</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    res_tab1, res_tab2, res_tab3, res_tab4, res_tab5, res_tab6 = st.tabs([
+        "🚨 Risk Assessment",
+        "🤖 Deepfake Detection",
+        "📝 Transcript",
+        "🎯 Scam Analysis",
+        "⏱️ Performance & Latency",
+        "📋 Canonical Schema"
+    ])
+
+    with res_tab1:
+        st.write("**Risk reasons:**")
+        reasons = risk_info.get("reasons", []) or result.get("risk_reasons", [])
+        if reasons:
+            for reason in reasons:
+                st.write(f"• {reason}")
+        else:
+            st.info("No specific risk reasons were returned.")
+
+    with res_tab2:
+        st.plotly_chart(create_risk_gauge(deepfake_prob, "Deepfake Score"), use_container_width=True)
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.metric("Prediction Class", deepfake_data.get("prediction_class", "Unknown"))
+        with col_b:
+            st.metric("Model Checkpoint Loaded", "Yes" if df_loaded else "No (Untrained / Demo)")
+        if df_status:
+            st.caption(f"Status: {df_status}")
+
+    with res_tab3:
+        transcript = result.get("transcript", "")
+        if transcript:
+            st.text_area("Transcription", value=transcript, height=180, disabled=True)
+        else:
+            st.info("No spoken transcript text detected in this audio.")
+
+    with res_tab4:
+        st.plotly_chart(create_risk_gauge(scam_prob, "Scam Risk"), use_container_width=True)
+        st.metric("Detection Method", scam_data.get("detection_method", "Unknown"))
+        indicators = scam_data.get("indicators", {})
+        if isinstance(indicators, dict):
+            for category, items in indicators.items():
+                if items:
+                    with st.expander(f"{category.title()} ({len(items)})"):
+                        for item in items:
+                            st.write(f"• {item}")
+        elif isinstance(indicators, list) and indicators:
+            with st.expander("Detected Scam Indicators"):
+                for item in indicators:
+                    st.write(f"• {item}")
+
+    with res_tab5:
+        timing = result.get("timing_metrics", {})
+        perf_data = {
+            "Component": ["Preprocessing", "Deepfake Detection", "ASR", "Scam Analysis", "Total"],
+            "Time (ms)": [
+                float(timing.get("preprocessing_time", 0) or 0) * 1000,
+                float(timing.get("deepfake_time", 0) or 0) * 1000,
+                float(timing.get("asr_time", 0) or 0) * 1000,
+                float(timing.get("scam_time", 0) or 0) * 1000,
+                float(timing.get("total_processing_time", 0) or 0) * 1000,
+            ]
+        }
+        st.dataframe(pd.DataFrame(perf_data), use_container_width=True, hide_index=True)
+
+        latency = result.get("latency_metrics")
+        if latency:
+            st.divider()
+            st.subheader("Streaming Latency & Queue Metrics")
+            l_col1, l_col2, l_col3, l_col4 = st.columns(4)
+            with l_col1:
+                st.metric("Measured E2E Latency", f"{latency.get('end_to_end_latency_ms', 0)} ms")
+            with l_col2:
+                st.metric("Inference Time", f"{latency.get('inference_duration_ms', 0)} ms")
+            with l_col3:
+                st.metric("Queue Depth", latency.get("queue_depth", 0))
+            with l_col4:
+                st.metric("Dropped Chunks (Backpressure)", latency.get("dropped_chunks", 0))
+
+    with res_tab6:
+        st.json(result)
 
 
 # ============================================================================
-# MAIN APP
+# MAIN APP HEADER & STATUS BAR
 # ============================================================================
-
-# Header
 st.markdown("""
     <div class="header-main">
         <h1>🎙️ Deepfake Voice Interceptor</h1>
-        <p>Real-Time Audio Analysis & Deepfake Detection</p>
+        <p>Real-Time Deepfake Detection, ASR, and Scam Intent Analysis</p>
     </div>
 """, unsafe_allow_html=True)
 
-# Status bar
 col1, col2, col3 = st.columns([2, 2, 2])
-
 with col1:
     api_status = get_api_status()
     if api_status:
         st.markdown('<div class="status-online">✅ Backend Connected</div>', unsafe_allow_html=True)
     else:
-        st.markdown(
-            '<div class="status-offline">❌ Backend Disconnected</div>',
-            unsafe_allow_html=True
-        )
-        st.error("Backend not running. Start it with: `python start_backend.py`")
-
+        st.markdown('<div class="status-offline">❌ Backend Disconnected</div>', unsafe_allow_html=True)
 with col2:
-    st.metric("System Status", "Ready" if api_status else "Error")
-
+    st.metric("System Mode", "WebRTC & Audio Analysis")
 with col3:
     st.metric("Timestamp", datetime.now().strftime("%H:%M:%S"))
 
@@ -465,7 +507,6 @@ st.divider()
 # ============================================================================
 # MAIN TABS
 # ============================================================================
-
 tab_upload, tab_live, tab_demo, tab_analytics, tab_api, tab_about = st.tabs([
     "📁 Upload Audio",
     "📡 Live Call Monitor",
@@ -480,33 +521,27 @@ tab_upload, tab_live, tab_demo, tab_analytics, tab_api, tab_about = st.tabs([
 # ============================================================================
 with tab_upload:
     st.header("Upload & Analyze Audio")
-    
     st.markdown("""
     <div class="info-box">
-    📢 <strong>How to use:</strong> Upload an audio file (WAV, MP3, M4A, FLAC) to analyze it for deepfake detection, transcription, and scam intent detection.
+    Upload an audio file (WAV, MP3, M4A, FLAC, OGG). The pipeline extracts Mel spectrograms for deepfake detection, performs Whisper ASR transcription, and runs NLP scam intent analysis.
     </div>
     """, unsafe_allow_html=True)
-    
+
     uploaded_file = st.file_uploader(
         "Choose an audio file",
         type=["wav", "mp3", "m4a", "flac", "ogg"],
         help="Supported formats: WAV, MP3, M4A, FLAC, OGG"
     )
-    
+
     if uploaded_file is not None:
-        # Display audio info
-        col1, col2, col3 = st.columns(3)
-        with col1:
+        c1, c2 = st.columns(2)
+        with c1:
             st.metric("File Name", uploaded_file.name[:30])
-        with col2:
+        with c2:
             st.metric("File Size", f"{uploaded_file.size / 1024:.1f} KB")
-        with col3:
-            st.metric("Duration", "Calculating...")
-        
-        # Audio player
+
         st.audio(uploaded_file)
-        
-        # Analyze button
+
         if st.button("🔍 Analyze Audio", use_container_width=True):
             if api_status:
                 result = upload_and_analyze(uploaded_file)
@@ -514,285 +549,143 @@ with tab_upload:
                     st.session_state.analysis_result = result
                     st.success("✅ Analysis complete!")
             else:
-                st.error("❌ Backend is not running!")
-    
-    # Display results if available
+                st.error("❌ Backend is not running! Start it with `python start_backend.py`.")
+
     if st.session_state.analysis_result:
         st.divider()
         st.subheader("📊 Analysis Results")
-        
-        result = st.session_state.analysis_result
-        risk_info = result.get("risk", {})
-        risk_category = risk_info.get("risk_category", "UNKNOWN")
-        risk_score = float(risk_info.get("overall_risk_score", 0.0) or 0.0)
-        deepfake_prob = float(result.get("deepfake", {}).get("deepfake_probability", 0.0) or 0.0)
-        scam_prob = float(result.get("scam", {}).get("scam_probability", 0.0) or 0.0)
-
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.markdown(f"<div class='metric-container'><div style='font-size:12px;letter-spacing:1px;color:#93c5fd;text-transform:uppercase;'>Deepfake Risk</div><div style='font-size:2.2rem;font-weight:800;margin-top:8px;'>{deepfake_prob * 100:.1f}%</div></div>", unsafe_allow_html=True)
-        with c2:
-            st.markdown(f"<div class='metric-container'><div style='font-size:12px;letter-spacing:1px;color:#93c5fd;text-transform:uppercase;'>Scam Intent</div><div style='font-size:2.2rem;font-weight:800;margin-top:8px;'>{scam_prob * 100:.1f}%</div></div>", unsafe_allow_html=True)
-        with c3:
-            st.markdown(f"<div class='metric-container'><div style='font-size:12px;letter-spacing:1px;color:#93c5fd;text-transform:uppercase;'>Overall Risk</div><div style='font-size:2.2rem;font-weight:800;margin-top:8px;'>{risk_score * 100:.1f}%</div></div>", unsafe_allow_html=True)
-
-        risk_class = get_risk_class(risk_category)
-        st.markdown(f"""
-            <div class="{risk_class}">
-                <h3 style="margin: 0;">Risk Level: {risk_category}</h3>
-                <h1 style="margin: 10px 0 0 0;">{risk_score * 100:.1f}%</h1>
-                <p style="margin: 10px 0 0 0; opacity: 0.9;">{risk_info.get('recommendation', 'No recommendation available')}</p>
-            </div>
-        """, unsafe_allow_html=True)
-
-        res_tab1, res_tab2, res_tab3, res_tab4, res_tab5, res_tab6 = st.tabs([
-            "🚨 Risk Assessment",
-            "🤖 Deepfake Detection",
-            "📝 Transcript",
-            "🎯 Scam Analysis",
-            "⏱️ Performance",
-            "📋 Details"
-        ])
-        
-        with res_tab1:
-            st.write("**Risk reasons:**")
-            reasons = risk_info.get("reasons", []) or result.get("risk_reasons", [])
-            if reasons:
-                for reason in reasons:
-                    st.write(f"• {reason}")
-            else:
-                st.info("No specific risk reasons were returned.")
-
-        with res_tab2:
-            deepfake = result.get("deepfake", {})
-            st.plotly_chart(create_risk_gauge(deepfake.get("deepfake_probability", 0), "Deepfake Score"), use_container_width=True)
-            st.metric("Prediction", deepfake.get("prediction_class", "Unknown"))
-            st.metric("Confidence", f"{max(deepfake.get('confidence_scores', [0]))*100:.1f}%")
-
-        with res_tab3:
-            transcript = result.get("transcript", "")
-            if transcript:
-                st.text_area("Transcription", value=transcript, height=180, disabled=True)
-            else:
-                st.warning("⚠️ No transcript available")
-
-        with res_tab4:
-            scam = result.get("scam", {})
-            st.plotly_chart(create_risk_gauge(scam.get("scam_probability", 0), "Scam Risk"), use_container_width=True)
-            st.metric("Category", scam.get("risk_category", "Unknown"))
-            st.metric("Method", scam.get("detection_method", "Unknown"))
-            indicators = scam.get("indicators", {})
-            if indicators:
-                for category, items in indicators.items():
-                    if items:
-                        with st.expander(f"{category.title()} ({len(items)})"):
-                            for item in items:
-                                st.write(f"• {item}")
-
-        with res_tab5:
-            timing = result.get("timing_metrics", {})
-            perf_data = {
-                "Component": ["Preprocessing", "Deepfake Detection", "ASR", "Scam Analysis", "Total"],
-                "Time (ms)": [
-                    float(timing.get("preprocessing_time", 0) or 0) * 1000,
-                    float(timing.get("deepfake_time", 0) or 0) * 1000,
-                    float(timing.get("asr_time", 0) or 0) * 1000,
-                    float(timing.get("scam_time", 0) or 0) * 1000,
-                    float(timing.get("total_processing_time", 0) or 0) * 1000,
-                ]
-            }
-            st.dataframe(pd.DataFrame(perf_data), use_container_width=True, hide_index=True)
-
-        with res_tab6:
-            st.json(result)
-
+        render_unified_analysis_result(st.session_state.analysis_result)
 
 # ============================================================================
 # TAB 2: LIVE CALL MONITOR
 # ============================================================================
 with tab_live:
-    st.header("📡 Live Call Monitor")
+    st.header("📡 Live Call Monitor (WebRTC & Streaming)")
+
     st.markdown("""
-    <div class="info-box">
-    📢 <strong>Incoming call monitoring:</strong> This module is built for a real-time microphone-driven call interception workflow. The browser captures live audio, streams it to the backend, and evaluates the voice for deepfake and scam risk as the call progresses.
+    <div class="warning-card">
+    <strong>⚠️ Telephony / PSTN Limitation Notice:</strong> This project implements browser-to-browser voice calling via WebRTC and analyzes the <em>received remote audio track</em> with mutual participant consent. It does <strong>not</strong> intercept PSTN/cellular phone network calls, which requires telecommunication provider integration (SIP trunking) and credentials not available in this academic prototype.
     </div>
     """, unsafe_allow_html=True)
 
-    st.subheader("Live Monitoring Workflow")
     st.markdown("""
-    1. Open the browser-based live call monitor.
-    2. Allow microphone access.
-    3. Start the live session.
-    4. The system streams audio chunks to the backend in real time.
-    5. The model evaluates deepfake, scam intent, and overall risk continuously.
-    """)
+    <div class="info-box">
+    <strong>How to use Live WebRTC Audio Call:</strong>
+    <ol>
+      <li>Click the button below to open the <strong>Live WebRTC Call Interface</strong> in a new browser window.</li>
+      <li>To test a 2-party call, open the same link in a <em>second</em> browser window.</li>
+      <li>Participant A clicks <strong>Create New Call</strong> (generates a Call ID like <code>CALL-1234</code>) and checks the Consent box.</li>
+      <li>Participant B enters that Call ID, checks Consent, and clicks <strong>Join Call</strong>.</li>
+      <li>Once connected, the receiver's browser analyzes the <strong>remote audio track</strong> in real time.</li>
+      <li>Alternatively, use <strong>Local Microphone Test Mode</strong> for single-user acoustic smoke-testing.</li>
+    </ol>
+    </div>
+    """, unsafe_allow_html=True)
 
-    if get_api_status():
-        st.success("✅ Backend is running and ready for live monitoring.")
-    else:
-        st.warning("⚠️ Backend is not running. Start it with `python start_backend.py` before opening the live monitor.")
-
-    st.markdown("[Open Live Call Monitor in Browser](http://127.0.0.1:8000/api/v1/live-call)", unsafe_allow_html=True)
-
-    st.caption("This is the implementation that matches the report. Demo audio files are only fallback testing data, not the main live-call workflow.")
+    st.link_button(
+        "🚀 Open Live WebRTC Call Interface",
+        "http://127.0.0.1:8000/api/v1/live-call",
+        use_container_width=True
+    )
 
     st.divider()
-
-    st.subheader("Fallback Demo Test")
-    st.info("Use this only if you want to test the backend pipeline with a sample file. The report-aligned system is the live microphone call monitor above.")
+    st.subheader("Fallback Streaming Simulation")
+    st.caption("Stream a pre-recorded audio file in bounded chunks over the WebSocket streaming pipeline:")
 
     demo_files = load_demo_audio_files()
-    if not demo_files:
-        st.warning("No demo files found in `demo_samples/`.")
-        if st.button("Generate Demo Audio for Testing"):
-            sr = 16000
-            duration = 6
-            t = np.linspace(0, duration, int(sr * duration))
-            audio = 0.55 * np.sin(2 * np.pi * 220 * t)
-            audio += 0.25 * np.sin(2 * np.pi * 330 * t)
-            audio += 0.18 * np.sin(2 * np.pi * 500 * t)
-            audio += np.random.normal(0, 0.03, len(audio))
-            os.makedirs("demo_samples", exist_ok=True)
-            sf.write("demo_samples/demo_live_call.wav", audio, sr)
-            st.success("✅ Demo test audio created.")
-            st.rerun()
-    else:
-        selected_demo = st.selectbox("Choose demo fallback file", demo_files)
+    if demo_files:
+        selected_demo = st.selectbox("Choose audio file to simulate streaming:", demo_files)
         demo_path = os.path.join("demo_samples", selected_demo)
         with open(demo_path, "rb") as f:
             st.audio(f.read(), format="audio/wav")
 
-        if st.button("Run Demo Fallback Analysis", use_container_width=True):
-            if not get_api_status():
-                st.error("❌ Backend is not running. Start it with `python start_backend.py` first.")
+        if st.button("▶️ Run Streaming Simulation", use_container_width=True):
+            if not api_status:
+                st.error("❌ Backend is not running.")
             else:
                 with open(demo_path, "rb") as f:
                     live_stream = BytesIO(f.read())
-                with st.spinner("Analyzing demo fallback audio..."):
-                    result = stream_live_audio_to_backend(live_stream)
-                if result and "error" not in result:
-                    st.session_state.analysis_result = result
-                    risk_data = result.get("risk", {})
-                    st.success("✅ Demo fallback analysis complete")
-                    st.metric("Deepfake Risk", f"{result.get('deepfake', {}).get('deepfake_probability', 0) * 100:.1f}%")
-                    st.metric("Scam Intent", f"{result.get('scam', {}).get('scam_probability', 0) * 100:.1f}%")
-                    st.metric("Overall Risk", f"{risk_data.get('overall_risk_score', 0) * 100:.1f}%")
+                with st.spinner("Streaming chunks over WebSocket to backend..."):
+                    stream_res = stream_live_audio_to_backend(live_stream)
+                if stream_res and "error" not in stream_res:
+                    st.session_state.analysis_result = stream_res
+                    st.success("✅ Streaming analysis complete!")
+                    render_unified_analysis_result(stream_res)
                 else:
-                    st.error(f"❌ Demo fallback failed: {result.get('error', 'Unknown error') if result else 'Unknown error'}")
-
-    if st.session_state.analysis_result:
-        st.divider()
-        st.subheader("Latest Analysis")
-        result = st.session_state.analysis_result
-        risk_info = result.get("risk", {})
-        if result.get("transcript"):
-            st.text_area("Transcript", value=result.get("transcript", ""), height=150, disabled=True)
-        st.json({
-            "Risk Category": risk_info.get("risk_category", "UNKNOWN"),
-            "Overall Risk Score": risk_info.get("overall_risk_score", 0),
-            "Recommendation": risk_info.get("recommendation", "No recommendation"),
-            "Deepfake": result.get("deepfake", {}).get("deepfake_probability", 0),
-            "Scam": result.get("scam", {}).get("scam_probability", 0),
-            "Reasons": risk_info.get("reasons", [])
-        })
-
+                    st.error(f"❌ Streaming failed: {stream_res.get('error') if stream_res else 'Unknown error'}")
 
 # ============================================================================
 # TAB 3: DEMO SAMPLES
 # ============================================================================
 with tab_demo:
-    st.header("Demo Audio Samples")
-    
+    st.header("🎵 Demo Audio Samples")
     st.markdown("""
-    <div class="success-box">
-    🎵 <strong>Demo Mode:</strong> Use pre-loaded sample audio files to test the system without uploading your own.
+    <div class="info-box">
+    Pre-loaded audio samples for rapid pipeline verification. Note that generated sinusoidal waveforms in <code>demo_samples/</code> are synthetic test tones to verify pipeline execution, not authentic human speech.
     </div>
     """, unsafe_allow_html=True)
-    
-    demo_files = load_demo_audio_files()
-    
-    if not demo_files:
-        st.warning("⚠️ No demo samples found in `demo_samples/` directory")
-        st.info("""
-        To add demo samples:
-        1. Create a `demo_samples/` folder in the project root
-        2. Add .wav, .mp3, .m4a, or .flac files
-        3. Refresh this page
-        
-        **Or generate a test file:**
-        """)
-        
-        if st.button("Generate Sample Audio"):
-            sr = 16000
-            duration = 3
-            t = np.linspace(0, duration, int(sr*duration))
-            
-            # Create "speech-like" audio
-            audio = 0.5 * np.sin(2 * np.pi * 440 * t)
-            audio += 0.2 * np.sin(2 * np.pi * 200 * t)
-            audio += 0.1 * np.sin(2 * np.pi * 600 * t)
-            audio += np.random.normal(0, 0.02, len(audio))
-            
-            # Save
-            os.makedirs("demo_samples", exist_ok=True)
-            sf.write("demo_samples/test_sample.wav", audio, sr)
-            st.success("✅ Generated test_sample.wav")
-            st.rerun()
-    else:
-        st.success(f"✅ Found {len(demo_files)} demo sample(s)")
-        
-        selected_demo = st.selectbox("Choose a demo file:", demo_files)
-        
-        if selected_demo:
-            demo_path = os.path.join("demo_samples", selected_demo)
-            
-            with open(demo_path, "rb") as f:
-                st.audio(f.read(), format="audio/wav")
-            
-            if st.button("Analyze Demo Sample", use_container_width=True):
-                if api_status:
-                    with open(demo_path, "rb") as f:
-                        result = upload_and_analyze(("demo.wav", f, "audio/wav"))
-                    
-                    if result:
-                        st.session_state.analysis_result = result
-                        st.success("✅ Analysis complete!")
-                        if hasattr(st, "switch_to_tab"):
-                            st.switch_to_tab("📁 Upload Audio")
-                        else:
-                            st.info("✅ Analysis complete. Please review the Upload Audio tab.")
-                else:
-                    st.error("❌ Backend not running!")
 
+    demo_files = load_demo_audio_files()
+    if not demo_files:
+        st.warning("No demo files found in demo_samples/. Run `python populate_audio_datasets.py` to create test tones.")
+    else:
+        selected_demo = st.selectbox("Select sample to inspect:", demo_files)
+        demo_path = os.path.join("demo_samples", selected_demo)
+        with open(demo_path, "rb") as f:
+            st.audio(f.read(), format="audio/wav")
+
+        if st.button("🔍 Analyze Selected Sample", use_container_width=True):
+            if api_status:
+                with open(demo_path, "rb") as f:
+                    res = upload_and_analyze(("demo.wav", f, "audio/wav"))
+                if res:
+                    st.session_state.analysis_result = res
+                    st.success("✅ Sample analyzed.")
+                    render_unified_analysis_result(res)
+            else:
+                st.error("❌ Backend is not running.")
 
 # ============================================================================
-# TAB 4: ANALYTICS
+# TAB 4: ANALYTICS & PRIVACY
 # ============================================================================
 with tab_analytics:
     st.header("📊 Analytics & History")
-    
-    if st.button("🔄 Refresh Analytics", use_container_width=True):
-        st.rerun()
-    
+
+    top_c1, top_c2 = st.columns([4, 1])
+    with top_c2:
+        if st.button("🗑️ Clear History", use_container_width=True):
+            try:
+                del_res = requests.delete(f"{API_URL}/history", timeout=5)
+                if del_res.status_code == 200:
+                    st.success("✅ Analysis history purged from database.")
+                    st.rerun()
+                else:
+                    st.error("Failed to purge history.")
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+    with st.expander("🔒 Data Storage & Privacy Guarantees", expanded=False):
+        st.markdown("""
+        - **No Raw Audio Persistence**: Audio streams and uploaded recordings are processed entirely in memory. Raw audio is **never stored on disk** or external servers.
+        - **Logged Metadata**: Only analytical records (timestamps, deepfake probabilities, transcript text, scam indicators, and risk scores) are logged in the local SQLite database for auditing.
+        - **Data Deletion**: Users may purge all historical analysis records at any time using the **Clear History** button above.
+        """)
+
     try:
-        # Get statistics
         stats_response = requests.get(f"{API_URL}/statistics", timeout=5)
         if stats_response.status_code == 200:
             stats = stats_response.json()
-            
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
+            s1, s2, s3, s4 = st.columns(4)
+            with s1:
                 st.metric("Total Analyses", stats.get("total_analyses", 0))
-            with col2:
+            with s2:
                 st.metric("High Risk", stats.get("high_risk_count", 0))
-            with col3:
+            with s3:
                 st.metric("Medium Risk", stats.get("medium_risk_count", 0))
-            with col4:
+            with s4:
                 st.metric("Low Risk", stats.get("low_risk_count", 0))
-            
+
             st.divider()
-            
-            # Risk distribution pie chart
             risk_data = {
                 "Risk Level": ["High", "Medium", "Low"],
                 "Count": [
@@ -801,129 +694,61 @@ with tab_analytics:
                     stats.get("low_risk_count", 0)
                 ]
             }
-            
-            fig = px.pie(
-                values=risk_data["Count"],
-                names=risk_data["Risk Level"],
-                color_discrete_map={"High": "#e74c3c", "Medium": "#f39c12", "Low": "#27ae60"}
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No analytics data available yet")
-    except:
-        st.warning("Could not fetch analytics data")
-
+            if sum(risk_data["Count"]) > 0:
+                fig = px.pie(
+                    values=risk_data["Count"],
+                    names=risk_data["Risk Level"],
+                    color_discrete_map={"High": "#e74c3c", "Medium": "#f39c12", "Low": "#27ae60"}
+                )
+                fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", font=dict(color="#edf4ff"))
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No recorded analyses in database yet.")
+    except Exception as e:
+        st.warning(f"Could not fetch analytics: {e}")
 
 # ============================================================================
 # TAB 5: API DOCS
 # ============================================================================
 with tab_api:
-    st.header("🔌 API Documentation")
-    
+    st.header("🔌 REST & WebSocket API Documentation")
     st.markdown("""
-    ### REST API Endpoints
-    
-    #### 1. Health Check
-    ```
-    GET /api/v1/health
-    ```
-    Returns API status and model information.
-    
-    #### 2. Analyze Audio (Upload)
-    ```
-    POST /api/v1/analyze/audio
-    ```
-    Upload an audio file for analysis.
-    
-    #### 3. Get Results
-    ```
-    GET /api/v1/results/{session_id}
-    ```
-    Retrieve a specific analysis result.
-    
-    #### 4. List Recent Results
-    ```
-    GET /api/v1/results?limit=10&risk_category=HIGH
-    ```
-    Get recent analyses with optional filtering.
-    
-    #### 5. Statistics
-    ```
-    GET /api/v1/statistics?hours=24
-    ```
-    Get aggregated statistics.
-    
-    ### WebSocket Endpoint
-    
-    ```
-    WS /api/v1/ws/analyze
-    ```
-    Real-time streaming audio analysis.
-    
-    ### Example Usage
-    ```bash
-    # Analyze an audio file
-    curl -X POST http://127.0.0.1:8001/api/v1/analyze/audio \\
-      -F "file=@sample.wav"
-    
-    # Get health status
-    curl http://127.0.0.1:8001/api/v1/health
-    ```
+    ### REST Endpoints
+    - `GET /api/v1/health` - Check backend health and loaded model status.
+    - `POST /api/v1/analyze/audio` - Upload audio file (WAV/MP3/FLAC/OGG) for complete analysis.
+    - `POST /api/v1/analyze/transcript` - Analyze transcript text directly for scam indicators.
+    - `GET /api/v1/results/{session_id}` - Retrieve analysis result by session UUID.
+    - `GET /api/v1/results` - List recent analysis history.
+    - `DELETE /api/v1/history` - Purge historical analysis records.
+    - `GET /api/v1/privacy` - View privacy guarantees and data retention policy.
+    - `GET /api/v1/live-call` - In-app WebRTC live call & remote track audio analyzer.
+    - `POST /api/v1/call/session/create` - Create a WebRTC call session room ID.
+    - `GET /api/v1/call/session/{call_id}` - Query participants and mutual consent status.
+
+    ### WebSocket Endpoints
+    - `WS /api/v1/ws/analyze` - Bounded sliding-window audio streaming analysis with backpressure handling.
+    - `WS /api/v1/call/ws/{call_id}/{peer_id}` - WebRTC signaling socket (SDP offer/answer, ICE candidates, consent).
     """)
 
-
 # ============================================================================
-# TAB 6: ABOUT
+# TAB 6: ABOUT & CITATIONS
 # ============================================================================
 with tab_about:
-    st.header("ℹ️ About")
-    
+    st.header("ℹ️ About & Academic Status")
     st.markdown("""
     ### Real-Time Deepfake Voice Interceptor & Audio Authenticator
-    
-    A comprehensive audio analysis system for detecting AI-generated speech and identifying scam intent.
-    
-    #### Features
-    - 🤖 **Deepfake Detection** - CNN+GRU neural network for voice spoofing detection
-    - 🎤 **Speech Recognition** - Whisper ASR for accurate transcription
-    - 🎯 **Scam Analysis** - NLP-based fraud intent detection
-    - 📊 **Risk Assessment** - Combined risk scoring and categorization
-    - 📈 **Analytics** - Historical data and statistics
-    - 🔌 **REST API** - Full API for integration
-    - 💾 **Database** - SQLite logging for audit trails
-    
-    #### Technology Stack
-    - **Backend**: FastAPI + Uvicorn
-    - **Frontend**: Streamlit
-    - **ML**: PyTorch, Transformers, scikit-learn
-    - **Audio**: Librosa, Soundfile
-    - **Database**: SQLite + SQLAlchemy
-    
-    #### Project Information
-    - **Version**: 1.0.0-beta
-    - **Status**: Ready for Review-2
-    - **Institution**: VIT Vellore
-    - **Course**: BCSE497J - Project-I
-    - **Last Updated**: 2026-08-31
-    
-    #### Documentation
-    - [README.md](README.md) - Complete setup guide
-    - [QUICK_START.md](QUICK_START.md) - Quick setup instructions
-    - [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md) - Implementation details
-    
-    #### Disclaimer
-    ⚠️ **Academic Prototype**: This system is designed for research and demonstration purposes. 
-    All predictions are generated from real models (not simulated), but the system has known 
-    limitations. See documentation for complete details.
+    Academic prototype developed for **BCSE497J - Project-I**, VIT Vellore.
+
+    #### Architecture Highlights
+    - **Acoustic Anti-Spoofing**: CNN + GRU model inspired by RawNet2 on Mel spectrogram representations.
+    - **Speech-to-Text**: Whisper ASR running on throttled cadences to preserve real-time streaming performance.
+    - **Scam-Intent NLP**: Keyword and rule-based indicator extraction with optional transformer zero-shot classification.
+    - **Risk Fusion Engine**: Configurable weighted combination of acoustic and linguistic threat probabilities.
+    - **In-App WebRTC Calling**: Browser-to-browser audio call with mutual consent and remote audio track analysis.
+
+    #### Scientific Integrity Statement
+    ⚠️ **Academic Prototype Notice**: This system is designed for research, review, and demonstration. Detection metrics must be validated using official, held-out partitions from certified corpora (e.g. ASVspoof 2019/2021). The prototype does not perform cellular/PSTN telephone network interception, which requires carrier-level telephony gateway infrastructure.
     """)
 
-
-# ============================================================================
-# FOOTER
-# ============================================================================
 st.divider()
-st.markdown("""
-<div style="text-align: center; color: #7f8c8d; font-size: 0.9em;">
-💡 For questions or issues, see the documentation files in the project root.
-</div>
-""", unsafe_allow_html=True)
+st.caption("Real-Time Deepfake Voice Interceptor & Audio Authenticator | VIT Vellore BCSE497J Project-I")

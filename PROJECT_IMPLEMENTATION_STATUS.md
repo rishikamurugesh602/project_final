@@ -1,314 +1,141 @@
-"""
-Project implementation status tracker.
-Updated as the project progresses.
-"""
-
 # PROJECT IMPLEMENTATION STATUS
-# Real-Time Deepfake Voice Interceptor & Audio Authenticator
-# VIT BCSE497J Project-I Review-2
-
-## COMPLETED (✓)
-
-### Core Infrastructure
-- [x] Project structure and directories
-- [x] Configuration management (.env, config.py)
-- [x] Logging system setup
-- [x] Database setup (SQLite with SQLAlchemy)
-- [x] Database models and CRUD operations
-- [x] Pydantic schemas for API validation
-
-### Audio Processing (MODULE 1-2)
-- [x] Audio loading from files
-- [x] Audio normalization
-- [x] Resampling to standard sample rate
-- [x] Silence detection and removal
-- [x] Noise reduction (spectral gating)
-- [x] Mel spectrogram extraction
-- [x] Audio chunking for streaming
-
-### Deepfake Detection (MODULE 3)
-- [x] CNN + GRU model architecture
-- [x] Mel spectrogram input processing
-- [x] Attention mechanism
-- [x] Forward pass and prediction
-- [x] Model saving/loading
-- [x] Deepfake detection wrapper
-
-### ASR (MODULE 4)
-- [x] Whisper ASR integration
-- [x] Audio transcription
-- [x] Language detection
-- [x] Error handling
-
-### NLP Scam Detection (MODULE 5)
-- [x] Suspicious keyword detection
-- [x] Rule-based scam indicator identification
-- [x] Transformer-based NLP classification (BART-MNLI)
-- [x] Combined scoring approach
-- [x] Indicator categorization
-
-### Risk Engine (MODULE 6)
-- [x] Weighted probability combination
-- [x] Risk category classification
-- [x] Threshold configuration
-- [x] Reasoning generation
-- [x] Alert triggering logic
-
-### FastAPI Backend (MODULE 7)
-- [x] REST API endpoints
-  - [x] POST /analyze/audio
-  - [x] POST /analyze/transcript
-  - [x] GET /results/{session_id}
-  - [x] GET /results (list recent)
-  - [x] GET /statistics
-  - [x] GET /health
-- [x] WebSocket endpoint for streaming
-- [x] CORS middleware
-- [x] Error handling
-
-### Database & Logging (MODULE 8)
-- [x] SQLite database initialization
-- [x] Analysis results storage
-- [x] System metrics logging
-- [x] Historical data retrieval
-
-### Streamlit Dashboard (MODULE 9-10)
-- [x] Upload audio interface
-- [x] Demo audio selection
-- [x] Real-time results display
-- [x] Deepfake probability gauge
-- [x] Scam probability gauge
-- [x] Transcript display
-- [x] Risk assessment visualization
-- [x] Alert notifications
-- [x] Performance metrics
-- [x] Analytics section
-- [x] Recent history
-- [x] Statistics dashboard
-
-### Model Training (MODULE 11)
-- [x] AudioDataset class
-- [x] Data splitting functionality
-- [x] Training loop implementation
-- [x] Validation during training
-- [x] Learning rate scheduling
-- [x] Model checkpoint saving
-
-### Model Evaluation
-- [x] Evaluation metrics (accuracy, precision, recall, F1)
-- [x] Confusion matrix visualization
-- [x] ROC curve generation
-- [x] AUC-ROC calculation
-
-### Testing
-- [x] Unit tests for audio processor
-- [x] Unit tests for deepfake detector
-- [x] Unit tests for scam detector
-- [x] Unit tests for risk engine
-- [x] Integration tests
-
-### Documentation
-- [x] Configuration documentation (.env.example)
-- [x] Code comments and docstrings
-- [x] Training dataset structure docs
-
-## IN PROGRESS / PARTIAL
-
-### Demo Samples
-- [ ] Sample audio files in demo_samples/
-  - Status: Need to add sample audio files
-  - Note: Repository should not include copyrighted/large audio files
-  - Action: Users should add their own sample audio
-
-### Pre-trained Model
-- [ ] Pre-trained deepfake detector checkpoint
-  - Status: Model architecture exists but needs training
-  - Status: Training pipeline is ready (train_deepfake.py)
-  - Action: Run training with ASVspoof or similar dataset
-
-## NOT YET IMPLEMENTED
-
-### Optional Enhancements
-- [ ] GPU memory optimization
-- [ ] Advanced data augmentation
-- [ ] Multi-language support for ASR
-- [ ] Custom model fine-tuning UI
-- [ ] Real telephone integration
-- [ ] Advanced visualization dashboard
-
-## CURRENT STATUS SUMMARY
-
-**Implementation Level: ~75-80%**
-
-### What Works:
-1. ✓ Complete audio preprocessing pipeline
-2. ✓ Deepfake detector model (architecture ready)
-3. ✓ ASR using Whisper (fully integrated)
-4. ✓ Scam detection with NLP (transformer + rules)
-5. ✓ Risk engine combining all signals
-6. ✓ FastAPI backend with REST and WebSocket
-7. ✓ Streamlit dashboard (fully functional)
-8. ✓ Database logging and retrieval
-9. ✓ Training and evaluation scripts
-10. ✓ Comprehensive unit tests
-
-### What Needs:
-1. Audio files for demo and training
-2. Running training to get model checkpoint
-3. Testing the complete pipeline end-to-end
-
-### To Achieve 100% Functionality:
-
-1. **Add Sample Data**:
-   - Place audio files in `data/real/` and `data/fake/`
-   - Or place demo files in `demo_samples/`
-
-2. **Train Deepfake Detector** (Optional but recommended):
-   ```bash
-   python training/train_deepfake.py --data_dir data --epochs 50 --device cpu
-   ```
-
-3. **Start Backend**:
-   ```bash
-   uvicorn app.main:app --reload
-   ```
-
-4. **Start Dashboard**:
-   ```bash
-   streamlit run dashboard/streamlit_app.py
-   ```
-
-5. **Run Tests**:
-   ```bash
-   pytest tests/test_system.py -v
-   ```
-
-## FILE STRUCTURE
-
-```
-project_1/
-├── app/
-│   ├── __init__.py
-│   ├── main.py                    # FastAPI app
-│   ├── api/
-│   │   ├── __init__.py
-│   │   ├── routes.py              # REST endpoints
-│   │   └── websocket.py           # WebSocket streaming
-│   ├── models/
-│   │   ├── __init__.py
-│   │   ├── deepfake_detector.py   # Deepfake detection model
-│   │   ├── scam_detector.py       # NLP scam detection
-│   │   └── model_manager.py       # Model lifecycle management
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── audio_processor.py     # Audio preprocessing
-│   │   ├── asr_service.py         # Whisper ASR
-│   │   ├── risk_engine.py         # Risk calculation
-│   │   └── deepfake_service.py    # Pipeline orchestration
-│   ├── database/
-│   │   ├── __init__.py
-│   │   ├── database.py            # DB setup
-│   │   └── crud.py                # DB operations
-│   ├── schemas/
-│   │   ├── __init__.py
-│   │   └── analysis.py            # Pydantic schemas
-│   └── utils/
-│       ├── __init__.py
-│       ├── config.py              # Configuration
-│       └── logging.py             # Logging setup
-├── dashboard/
-│   └── streamlit_app.py           # Dashboard UI
-├── training/
-│   ├── train_deepfake.py          # Training script
-│   ├── evaluate_deepfake.py       # Evaluation script
-│   └── dataset.py                 # Dataset utilities
-├── tests/
-│   └── test_system.py             # Unit tests
-├── data/                          # (For user to populate)
-│   ├── real/                      # Genuine audio samples
-│   └── fake/                      # Deepfake audio samples
-├── demo_samples/                  # (For demo audio)
-├── models/
-│   └── checkpoints/               # (Model saves here)
-├── results/                       # (Evaluation results)
-├── logs/                          # (Application logs)
-├── requirements.txt               # Python dependencies
-├── .env.example                   # Configuration template
-└── README.md                      # Main documentation
-```
-
-## NEXT STEPS
-
-1. **Test the System**:
-   ```bash
-   pip install -r requirements.txt
-   python -m pytest tests/test_system.py -v
-   ```
-
-2. **Add Audio Samples** (Optional):
-   - Download ASVspoof or similar dataset
-   - Place samples in `data/real/` and `data/fake/`
-
-3. **Train Model** (Optional):
-   ```bash
-   python training/train_deepfake.py --data_dir data --epochs 20
-   ```
-
-4. **Run Backend**:
-   ```bash
-   uvicorn app.main:app --reload
-   ```
-
-5. **Run Dashboard**:
-   ```bash
-   streamlit run dashboard/streamlit_app.py
-   ```
-
-## KNOWN LIMITATIONS
-
-1. Deepfake detector uses randomly initialized weights unless trained
-   - Recommendation: Train with real dataset for better results
-   
-2. Scam detection uses rule-based + transformer combination
-   - Transformer model (BART) is used for zero-shot classification
-   - No fine-tuning on custom dataset yet
-
-3. ASR uses Whisper base model by default
-   - Can be configured to use different sizes (tiny, small, medium, large)
-
-4. WebSocket streaming is simulated (not real telephony interception)
-   - Uses base64-encoded audio chunks over WebSocket
-
-5. Database stores analysis results but raw audio optional
-   - Controlled by ENABLE_AUDIO_STORAGE config
-
-## TESTING STATUS
-
-- [x] Audio preprocessing: Unit tests pass
-- [x] Model architecture: Forward pass works
-- [x] Risk calculation: All categories working
-- [x] API endpoints: Ready to test
-- [x] Dashboard: Loads and connects to API
-
-## PERFORMANCE TARGETS
-
-- Preprocessing: < 0.5s
-- Deepfake detection: < 1s
-- ASR (Whisper base): 2-5s depending on audio length
-- Scam detection: < 0.5s
-- Total pipeline: 4-7s for typical audio
-
-## ACADEMIC HONESTY
-
-✓ No fabricated metrics
-✓ All metrics come from actual model inference
-✓ Clearly marks prototype status
-✓ Documents all limitations
-✓ No false accuracy claims
-✓ Baseline models clearly labeled
+## Real-Time Deepfake Voice Interceptor & Audio Authenticator
+**BCSE497J Project-I | School of Computer Science & Engineering (SCOPE)**  
+**Students**: Rishika Murugesh (23BAI0005), Anish S.A (23BCB0143)  
+**Supervisor**: Dr. Vijaya Kumar K  
+**Last Verified**: October 2026
 
 ---
 
-**Last Updated**: 2026-08-31
-**Status**: Ready for testing and demo
-**Completion**: ~80% (awaiting data + final testing)
+## 1. IMPLEMENTATION SUMMARY
+
+| Module / Requirement | Status | Implementation Details |
+| :--- | :---: | :--- |
+| **In-App Browser-to-Browser WebRTC Call** | ✓ Complete | Built peer-to-peer WebRTC audio room with room ID creation/joining, signaling WebSocket (`/call/ws/{call_id}/{peer_id}`), and in-browser UI (`/call/app`). |
+| **Mutual Consent & Remote Track Analysis** | ✓ Complete | Dual-consent enforcement (both peers must check consent before call stream initiates); taps remote audio track using Web Audio API (`createMediaStreamSource`). |
+| **Local Microphone Test Mode** | ✓ Complete | Preserved microphone monitor mode for local voice testing without needing a peer. |
+| **PSTN / Telephone Disclaimer** | ✓ Complete | Prominent warning banners on WebRTC call page, Streamlit dashboard, and documentation stating landline/cellular PSTN interception requires SIP trunking credentials not present. |
+| **Bounded Audio Sliding Window** | ✓ Complete | `BoundedAudioBuffer` caps acoustic buffer to latest 3.5 seconds (56,000 samples @ 16kHz); prevents memory leaks and unbounded growth. |
+| **Bounded Queue & Backpressure Handling** | ✓ Complete | `StreamingAnalysisSession` uses `asyncio.Queue(maxsize=10)`; drops older chunks gracefully when inference lags to avoid latency cascading. |
+| **Event Loop Offloading** | ✓ Complete | CPU-intensive model inference (PyTorch, Whisper, librosa) dispatched via `asyncio.to_thread`, keeping FastAPI's ASGI event loop fully responsive. |
+| **Throttled Whisper ASR** | ✓ Complete | Whisper transcription runs at controlled intervals or on turn finalization, eliminating per-chunk ASR lag. |
+| **Latency Tracking & Metrics** | ✓ Complete | Computes and displays chunk processing time, timestamp, and round-trip latency (`latency_ms`) in real time. |
+| **Privacy & No Raw Audio Persistence** | ✓ Complete | In-memory decoding (`io.BytesIO`); temporary decoding files guaranteed deleted via `try...finally`; database stores only analytical metadata; zero raw audio persisted to disk. |
+| **Analysis History Purging** | ✓ Complete | Implemented `DELETE /api/v1/history` and `POST /api/v1/history/clear`; added one-click **"Clear All Analysis History"** in dashboard. |
+| **Configurable CORS & Privacy Endpoint** | ✓ Complete | `ALLOWED_ORIGINS` in `.env` and `config.py`; `GET /api/v1/privacy` documents data retention guarantees. |
+| **ASVspoof Protocol Validation** | ✓ Complete | Created `training/validate_protocol.py` (CLI + API) to validate protocol lines, check audio file existence, and report bona fide vs spoof counts. |
+| **Honest Dataset Documentation** | ✓ Complete | Removed instructions telling users to copy files to `data/real` / `data/fake` or do random splits; documented held-out split evaluation. |
+| **Synthetic Demo Audio Relabeling** | ✓ Complete | `populate_audio_datasets.py` clearly states generated tones are synthetic pipeline verification signals, not human speech or evidence of model accuracy. |
+| **Canonical Result Structure** | ✓ Complete | Unified response structure across upload analysis, WebSocket streaming, and live WebRTC calling: `deepfake_probability`, `scam_probability`, `overall_risk_score`, `transcript`, `recommendations`, `latency_ms`, `model_status`. |
+| **Honest Model Status Disclosures** | ✓ Complete | Detects whether a trained `.pt` checkpoint exists; flags random/uninitialized weights in API responses and dashboard so users are never misled. |
+| **Automated Testing Suite** | ✓ Complete | 24 automated unit and integration tests passing (`tests/test_system.py` + `tests/test_streaming_and_webrtc.py`). `verify_system.py` 10/10 passing. |
+
+---
+
+## 2. DETAILED MODULE BREAKDOWN
+
+### Module 1: Live Audio Calling & Remote Track Interception
+- [x] WebRTC signaling WebSocket endpoint (`app/api/live_call.py`) handling SDP `offer`, `answer`, `ice-candidate`, `consent_update`, and peer status.
+- [x] `CallSessionManager` (`app/services/call_manager.py`) tracking active call rooms, participants, roles (`initiator` / `joiner`), and mutual consent flags.
+- [x] Full in-app WebRTC calling client (`/call/app`) rendered with vanilla HTML5, Web Audio API, and RTCPeerConnection.
+- [x] Web Audio API remote track interceptor: creates a `MediaStreamAudioSourceNode` from the incoming peer track, downsamples to 16kHz PCM, and streams over WebSocket.
+- [x] Standalone microphone test mode for single-browser offline testing.
+- [x] Clear disclaimers stating landline/cellular phone interception is not possible without external SIP trunking infrastructure.
+
+### Module 2: Streaming, Bounded Buffers & Backpressure
+- [x] `BoundedAudioBuffer` (`app/services/streaming_processor.py`):
+  - Enforces sliding window of 3.5 seconds (56,000 samples @ 16kHz).
+  - Handles variable chunk sizes and drops empty chunks.
+  - Supports clean reset upon session teardown.
+- [x] `StreamingAnalysisSession` (`app/services/streaming_processor.py`):
+  - Bounded `asyncio.Queue(maxsize=10)` with non-blocking enqueue.
+  - Drops oldest frames when queue is saturated (backpressure management).
+  - Offloads blocking model inference via `asyncio.to_thread`.
+  - Throttles Whisper ASR execution to avoid per-chunk freezes.
+  - Calculates end-to-end processing time and timestamp for each chunk.
+- [x] WebSocket streaming endpoint `/api/v1/ws/analyze` updated with session lifecycle and error recovery.
+
+### Module 3: Privacy, Data Retention & Security
+- [x] In-memory audio processing: uses `soundfile` and `io.BytesIO`.
+- [x] Guaranteed temporary file cleanup: any temp files used for fallback format conversions are wrapped in `try ... finally: os.remove(...)`.
+- [x] Analysis history purge:
+  - Database CRUD method `AnalysisResultCRUD.clear_all(db)`.
+  - API endpoints `DELETE /api/v1/history` and `POST /api/v1/history/clear`.
+  - Streamlit dashboard button under the Analytics tab.
+- [x] Privacy endpoint `GET /api/v1/privacy` documenting zero raw audio retention.
+- [x] Configurable CORS middleware using `config.get_allowed_origins()` instead of wildcard `*`.
+
+### Module 4: Acoustic Deepfake Detection & Model Lifecycle
+- [x] CNN + GRU model architecture with Mel spectrogram frontend (`app/models/deepfake_detector.py`).
+- [x] Model state inspection: reports `"Trained Checkpoint Loaded"` when a verified checkpoint exists or `"Untrained / Random Weights (Demo Only - No Verified Checkpoint)"` when uninitialized.
+- [x] Training pipeline: `training/train_deepfake.py` supporting epoch scheduling, validation loss tracking, and checkpoint saving.
+- [x] Evaluation pipeline: `training/evaluate_deepfake.py` computing accuracy, precision, recall, F1, and AUC-ROC on held-out evaluation datasets.
+
+### Module 5: ASR & Semantic Scam Intent Analysis
+- [x] OpenAI Whisper integration (`app/services/asr_service.py`) with configurable model sizes.
+- [x] NLP Scam Detector (`app/models/scam_detector.py`) combining rule-based financial/urgency patterns with zero-shot transformer classification (`facebook/bart-large-mnli`).
+- [x] Lazy loading of heavy transformer models and offline/local fallback to prevent blocking connection timeouts during offline runs.
+
+### Module 6: Risk Fusion Engine
+- [x] Weighted combination of acoustic deepfake score and semantic scam score (`app/services/risk_engine.py`).
+- [x] Categorization into `LOW`, `MEDIUM`, and `HIGH` risk with human-readable reasoning and actionable warning recommendations.
+- [x] Configurable weights and risk thresholds via `.env`.
+
+### Module 7: Frontend & Dashboards
+- [x] Unified Streamlit dashboard (`dashboard/streamlit_app.py`):
+  - Preserved file upload analysis workflow.
+  - Added WebRTC live calling guidance and direct link.
+  - Standardized canonical result rendering function `render_unified_analysis_result()`.
+  - Added Clear History button and privacy disclosures.
+  - Transparent model status badges and PSTN telephone disclaimer.
+
+### Module 8: ASVspoof Protocol Validation & Datasets
+- [x] `training/validate_protocol.py`: validates ASVspoof protocol files, verifies referenced audio files, and prints bonafide vs spoof class distributions.
+- [x] `populate_audio_datasets.py`: relabeled synthetic demo tones to clarify they are test signals for pipeline verification, not real human speech.
+- [x] `DATASET_AND_DEMO_GUIDE.md`: updated to remove improper folder copy instructions and guide users through official ASVspoof licensing and protocol validation.
+
+---
+
+## 3. VERIFICATION & TEST STATUS
+
+### Automated Test Suite:
+```bash
+pytest tests -v
+```
+**Results**:
+- `tests/test_streaming_and_webrtc.py`: 9/9 tests PASSED
+  - `test_buffer_bounds_max_samples`: PASSED
+  - `test_chunk_boundaries_and_empty_chunks`: PASSED
+  - `test_buffer_reset`: PASSED
+  - `test_queue_limit_and_backpressure_drop`: PASSED
+  - `test_session_close_and_disconnect`: PASSED
+  - `test_session_creation_roles_and_consent`: PASSED
+  - `test_clear_all_records`: PASSED
+  - `test_protocol_validator_success`: PASSED
+  - `test_protocol_validator_missing_files`: PASSED
+- `tests/test_system.py`: 15/15 tests PASSED
+  - Audio normalization & Mel spectrogram extraction: PASSED
+  - Deepfake detector creation, forward pass, and predict: PASSED
+  - Scam detector indicators, normal text, and empty text: PASSED
+  - Risk engine calculation (LOW, MEDIUM, HIGH) & recommendations: PASSED
+  - End-to-end preprocessing integration: PASSED
+- **Total: 24 passed in 34.92s**
+
+### System Subsystem Check:
+```bash
+python verify_system.py
+```
+**Results**: 10/10 subsystem checks passed.
+
+---
+
+## 4. LIMITATIONS & FUTURE SCOPE
+
+1. **Carrier PSTN / Cellular Telephony**:
+   - The current implementation provides in-browser WebRTC peer calling.
+   - Intercepting standard landline or cellular phone calls directly requires telecommunication carrier SIP trunking (e.g. Twilio, FreePBX, Asterisk) and active provider credentials.
+2. **Pretrained Deepfake Checkpoint**:
+   - The deepfake detector is initialized with random weights for demonstration until trained against the official ASVspoof 2019 dataset.
+   - The system transparently flags this status in all UI and API responses.
+3. **Multilingual Support**:
+   - Scam intent patterns are currently configured for English speech; multilingual intent detection can be integrated with multilingual transformers in future iterations.

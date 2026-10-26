@@ -2,13 +2,17 @@
 FastAPI REST endpoints for audio analysis.
 """
 import os
+import io
+import tempfile
 import uuid
+import asyncio
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 import numpy as np
 import librosa
+import soundfile as sf
 
 from app.schemas.analysis import (
     AnalysisResponse, AnalysisHistoryItem, AnalysisStatistics, 
@@ -39,7 +43,6 @@ async def health_check(db: Session = Depends(get_db)):
         Health status and model information
     """
     try:
-        # Check database connection
         from sqlalchemy import text
         db.execute(text("SELECT 1"))
         db_connected = True
@@ -57,6 +60,32 @@ async def health_check(db: Session = Depends(get_db)):
     )
 
 
+@router.get("/privacy")
+async def privacy_info():
+    """
+    Explain what data is stored and privacy guarantees.
+    """
+    return {
+        "audio_storage_enabled": config.ENABLE_AUDIO_STORAGE,
+        "raw_audio_persisted": False,
+        "stored_data": [
+            "session_id (UUID)",
+            "timestamp",
+            "audio_filename (original name without raw data)",
+            "deepfake_probability & prediction label",
+            "transcript text",
+            "scam_probability & indicators",
+            "overall_risk_score & category",
+            "processing timings"
+        ],
+        "policy": (
+            "Raw audio data is processed in-memory and is NOT persisted to disk or external servers. "
+            "Only analytical metrics, transcriptions, and risk scores are retained in the database "
+            "for auditing. Users may purge all stored analysis history via DELETE /api/v1/history."
+        )
+    }
+
+
 @router.post("/analyze/audio", response_model=dict)
 async def analyze_audio(
     file: UploadFile = File(...),
@@ -66,7 +95,7 @@ async def analyze_audio(
     Analyze uploaded audio file.
     
     Args:
-        file: Audio file (WAV, MP3, etc.)
+        file: Audio file (WAV, MP3, M4A, FLAC, OGG)
         db: Database session
     
     Returns:
@@ -75,7 +104,6 @@ async def analyze_audio(
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
     
-    # Validate file extension
     valid_extensions = ['.wav', '.mp3', '.m4a', '.flac', '.ogg']
     file_ext = os.path.splitext(file.filename)[1].lower()
     if file_ext not in valid_extensions:
@@ -86,29 +114,47 @@ async def analyze_audio(
     
     try:
         logger.info(f"Analyzing uploaded audio: {file.filename}")
-        
-        # Read audio data
         audio_data = await file.read()
         
-        # Save temporarily
-        temp_path = f"temp_{uuid.uuid4()}.wav"
-        with open(temp_path, "wb") as f:
-            f.write(audio_data)
+        # Load audio in-memory first to avoid raw audio disk persistence
+        audio = None
+        sr = None
+        try:
+            audio, sr = sf.read(io.BytesIO(audio_data), dtype="float32")
+            if audio.ndim > 1:
+                audio = np.mean(audio, axis=1)
+        except Exception:
+            try:
+                audio, sr = librosa.load(io.BytesIO(audio_data), sr=None, mono=True)
+            except Exception:
+                pass
         
-        # Load audio
-        audio, sr = librosa.load(temp_path, sr=None, mono=True)
+        # If in-memory decoding is unsupported for the container, use a temp file with guaranteed cleanup
+        if audio is None:
+            temp_fd, temp_path = tempfile.mkstemp(suffix=file_ext)
+            try:
+                with os.fdopen(temp_fd, "wb") as f:
+                    f.write(audio_data)
+                audio, sr = librosa.load(temp_path, sr=None, mono=True)
+            finally:
+                if os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except OSError:
+                        pass
         
-        # Run analysis
-        result = orchestrator.analyze(audio, sr, audio_filename=file.filename)
-        
-        # Clean up temp file
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+        if audio is None or len(audio) == 0:
+            raise HTTPException(status_code=400, detail="Could not decode audio from the provided file.")
+
+        # Run CPU/GPU heavy analysis off FastAPI's event loop
+        result = await asyncio.to_thread(
+            orchestrator.analyze, audio, sr, audio_filename=file.filename
+        )
         
         if "error" in result:
             raise HTTPException(status_code=500, detail=result["error"])
         
-        # Store in database
+        # Store metadata in database
         db_result = AnalysisResultCRUD.create(db, result)
 
         if isinstance(result.get("timestamp"), str):
@@ -121,7 +167,7 @@ async def analyze_audio(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error analyzing audio: {str(e)}")
+        logger.error(f"Error analyzing audio: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -146,10 +192,8 @@ async def analyze_transcript(
         raise HTTPException(status_code=400, detail="Transcript is required")
     
     try:
-        from app.models.scam_detector import ScamDetector
         scam_detector = model_manager.get_scam_detector()
-        result = scam_detector.predict(transcript)
-        
+        result = await asyncio.to_thread(scam_detector.predict, transcript)
         return JSONResponse(content=result, status_code=200)
     except Exception as e:
         logger.error(f"Error analyzing transcript: {str(e)}")
@@ -229,13 +273,38 @@ async def list_results(
                 "scam_probability": r.scam_probability,
                 "overall_risk_score": r.overall_risk_score,
                 "risk_category": r.risk_category,
-                "transcript": r.transcript[:100] if r.transcript else None  # Truncate
+                "transcript": r.transcript[:100] if r.transcript else None
             }
             for r in results
         ]
     except Exception as e:
         logger.error(f"Error listing results: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/history")
+async def clear_history(db: Session = Depends(get_db)):
+    """
+    Clear all analysis history from the database.
+    """
+    try:
+        count = AnalysisResultCRUD.clear_all(db)
+        return {
+            "status": "success",
+            "message": f"Successfully deleted {count} historical analysis records.",
+            "deleted_count": count
+        }
+    except Exception as e:
+        logger.error(f"Error clearing analysis history: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/history/clear")
+async def clear_history_post(db: Session = Depends(get_db)):
+    """
+    Alias endpoint for clearing analysis history.
+    """
+    return await clear_history(db=db)
 
 
 @router.get("/statistics", response_model=AnalysisStatistics)
